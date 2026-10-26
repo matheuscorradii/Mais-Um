@@ -5,7 +5,7 @@
   color-scheme:dark;
 }
 @media (prefers-color-scheme:light){
-  :root:not([data-theme="dark"]){
+  :root:not([data-theme="dark"]):not([data-profile="thais"]){
     --bg:#f3f4f0; --surface:#ffffff; --surface2:#eef0ea; --line:#dfe2da;
     --text:#14181a; --muted:#677074; --accent:#a8d614; --on-accent:#10130a;
     --ok:#4f8a00; --warn:#b36b00; --danger:#c8372d;
@@ -99,3 +99,16 @@ nav button.on::after{content:"";display:block;height:3px;width:22px;margin:4px a
 .toast.show{opacity:1}
 .empty{color:var(--muted);text-align:center;padding:24px 8px;font-size:14px}
 input[type=file]{display:none}
+
+/* perfil Thaís: branco e lilás */
+:root[data-profile="thais"]{
+  --bg:#faf7ff; --surface:#ffffff; --surface2:#f2ecfc; --line:#e5dbf6;
+  --text:#2a1f3d; --muted:#7d7195; --accent:#8a5cd6; --on-accent:#ffffff;
+  --ok:#6f3fc4; --warn:#b36b00; --danger:#c8372d;
+  color-scheme:light;
+}
+
+.eyebrow{margin:0 0 4px;color:var(--muted);font-size:13px;font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.perfil{display:block;width:100%;text-align:left;border-left:6px solid var(--c);padding:18px 16px}
+.perfil b{display:block;font-size:22px}
+.perfil span{color:var(--muted);font-size:14px}

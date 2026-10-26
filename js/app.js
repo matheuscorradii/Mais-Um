@@ -1,17 +1,34 @@
-/* ============================ dados ============================ */
-const KEY = 'meu-treino-v1';
-let db = load();
+/* ============================ perfil e dados ============================ */
+const PERFIL_KEY = 'mais-um-perfil';
+let PERFIL = null, PLAN = {}, META = {}, KEY = '', db = null;
+
 function load(){
-  try{ const d = JSON.parse(localStorage.getItem(KEY)); if(d && d.sessions) return d; }catch(e){}
+  try{
+    let raw = localStorage.getItem(KEY);
+    if(!raw && PERFIL.id==='matheus') raw = localStorage.getItem('meu-treino-v1'); // versão antiga
+    const d = JSON.parse(raw); if(d && d.sessions) return d;
+  }catch(e){}
   return { sessions:[], body:[], drafts:{}, seeded:false };
 }
 function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(db)); }
   catch(e){ toast('Não consegui salvar neste navegador'); }
 }
-if(!db.seeded){
-  db.body.push({ date:'2026-10-26', peso:76.3, gordura:20.6, musculo:57.8, visceral:8 });
-  db.seeded = true; save();
+function setPerfil(id){
+  PERFIL = { id, ...PERFIS[id] }; PLAN = PERFIL.plan; META = PERFIL.meta;
+  KEY = 'mais-um-v1:' + id;
+  db = load();
+  if(!db.seeded){ if(PERFIL.seedBody) db.body.push(PERFIL.seedBody); db.seeded = true; save(); }
+  document.documentElement.dataset.profile = id;
+  document.querySelector('meta[name="theme-color"]').content = PERFIL.themeColor;
+  st.w = defaultWorkout();
+}
+function sairPerfil(){
+  PERFIL = null; db = null;
+  try{ localStorage.removeItem(PERFIL_KEY); }catch(e){}
+  try{ history.replaceState(null,'',location.pathname); }catch(e){}
+  document.documentElement.removeAttribute('data-profile');
+  document.querySelector('meta[name="theme-color"]').content = '#0f1112';
 }
 
 /* ============================ helpers ============================ */
@@ -26,7 +43,7 @@ const range = ex => ex.r[0]===ex.r[1] ? `${ex.r[0]}` : `${ex.r[0]}–${ex.r[1]}`
 let toastT;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2000); }
 
-const st = { tab:'treino', w: defaultWorkout() };
+const st = { tab:'treino', w:'A' };
 function defaultWorkout(){ const d=new Date().getDay(); return [1,6,0].includes(d)?'A':[2,3].includes(d)?'B':'C'; }
 
 const sortedSessions = () => [...db.sessions].sort((a,b)=> (a.date+a.id).localeCompare(b.date+b.id));
@@ -66,11 +83,12 @@ function viewTreino(){
   const monthPrefix = today().slice(0,7);
   const monthCount = db.sessions.filter(s=>s.date.startsWith(monthPrefix)).length;
 
-  let h = `<h1>Treino ${st.w} · ${w.nome}</h1>
+  let h = `<p class="eyebrow">Mais Um · ${PERFIL.nome}</p><h1>Treino ${st.w} · ${w.nome}</h1>
     <p class="sub">${w.dia} · ${monthCount} treino${monthCount===1?'':'s'} neste mês</p>
     <div class="chips">${Object.entries(PLAN).map(([k,v])=>
       `<button class="chip ${k===st.w?'on':''}" data-act="pick" data-w="${k}"><b>${k}</b><small>${v.nome}</small></button>`).join('')}</div>`;
-  if(early) h += `<p class="tip">Semanas 1–2: cargas leves, 2 séries por exercício se estiver pesado, sempre sobrando ~3 repetições. É a fase de readaptar.</p>`;
+  if(PERFIL.aviso) h += `<p class="tip">${esc(PERFIL.aviso)}</p>`;
+  if(early && PERFIL.dicaInicio) h += `<p class="tip">${esc(PERFIL.dicaInicio)}</p>`;
 
   w.ex.forEach(ex=>{
     const sets = draftSets(st.w, ex);
@@ -80,12 +98,12 @@ function viewTreino(){
       <header><h3>${esc(ex.n)}</h3><span class="meta">${ex.s} × ${range(ex)}${ex.u||''}</span></header>
       <p class="last">${last ? 'Última vez ('+fmtDate(last.date)+'): '+last.sets.map(s=>ex.semCarga?`${s.reps}${ex.u||''}`:`${fmt(s.kg)}×${s.reps}`).join(' · ') : 'Primeira vez: anote como foi.'}</p>
       ${hint?`<p class="hint">${hint}</p>`:''}
-      <div class="cols ${ex.semCarga?'noload':''}"><span>#</span>${ex.semCarga?'':'<span style="text-align:center">Carga (kg)</span>'}<span style="text-align:center">${ex.u==='s'?'Segundos':'Reps'}</span><span></span></div>`;
+      <div class="cols ${ex.semCarga?'noload':''}"><span>#</span>${ex.semCarga?'':'<span style="text-align:center">Carga (kg)</span>'}<span style="text-align:center">${ex.u==='s'?'Segundos':ex.u==='min'?'Minutos':'Reps'}</span><span></span></div>`;
     sets.forEach((s,i)=>{
       const ph = last && last.sets[Math.min(i,last.sets.length-1)];
       h += `<div class="row ${ex.semCarga?'noload':''} ${s.done?'done':''}"><span class="n">${i+1}</span>
         ${ex.semCarga?'':`<input inputmode="decimal" autocomplete="off" placeholder="${ph&&ph.kg?fmt(ph.kg):'kg'}" value="${esc(s.kg)}" data-ex="${ex.id}" data-i="${i}" data-f="kg">`}
-        <input inputmode="numeric" autocomplete="off" placeholder="${ph&&ph.reps?ph.reps:(ex.u==='s'?'s':'reps')}" value="${esc(s.reps)}" data-ex="${ex.id}" data-i="${i}" data-f="reps">
+        <input inputmode="numeric" autocomplete="off" placeholder="${ph&&ph.reps?ph.reps:(ex.u||'reps')}" value="${esc(s.reps)}" data-ex="${ex.id}" data-i="${i}" data-f="reps">
         <button class="chk" data-act="chk" data-ex="${ex.id}" data-i="${i}" aria-label="Concluir série">✓</button></div>`;
     });
     h += `<div class="mini"><button class="link" data-act="addset" data-ex="${ex.id}">+ série</button>
@@ -132,8 +150,8 @@ function viewCorpo(){
   const cur = list[0] || {};
   let h = `<h1>Corpo</h1><p class="sub">Meça sempre nas mesmas condições (manhã, em jejum, após ir ao banheiro).</p>
   <section class="card"><div class="goal">
-    <div><small>Peso atual</small><b>${cur.peso?fmt(cur.peso)+' kg':'—'}</b><small>meta ~${META.peso} kg</small></div>
-    <div><small>Gordura atual</small><b>${cur.gordura?fmt(cur.gordura)+'%':'—'}</b><small>meta ~${META.gordura}%</small></div>
+    <div><small>Peso atual</small><b>${cur.peso?fmt(cur.peso)+' kg':'—'}</b><small>meta ${META.til||''}${META.peso} kg</small></div>
+    ${META.gordura?`<div><small>Gordura atual</small><b>${cur.gordura?fmt(cur.gordura)+'%':'—'}</b><small>meta ${META.til||''}${META.gordura}%</small></div>`:''}
   </div></section>
   <section class="card"><h3 style="margin-bottom:10px">Nova medição</h3>
     <form id="bodyForm"><div class="grid4">
@@ -162,15 +180,23 @@ function viewCorpo(){
 }
 
 function viewDados(){
-  return `<h1>Dados</h1><p class="sub">Tudo fica salvo neste navegador, neste aparelho. Faça backup de vez em quando.</p>
+  return `<h1>Dados</h1><p class="eyebrow">Perfil: ${PERFIL.nome}</p><p class="sub">Tudo fica salvo neste navegador, neste aparelho. Faça backup de vez em quando.</p>
   <section class="card">
     <button class="btn" data-act="export">Baixar backup (.json)</button>
     <label class="btn ghost" style="text-align:center;cursor:pointer">Restaurar backup<input type="file" id="imp" accept="application/json,.json"></label>
   </section>
+  <section class="card"><button class="btn ghost" data-act="trocar">Trocar de perfil</button></section>
   <section class="card"><button class="btn danger" data-act="wipe">Apagar todos os dados</button></section>`;
 }
 
+function viewPerfis(){
+  return `<h1>Mais Um</h1><p class="sub">Quem vai treinar?</p>` + Object.entries(PERFIS).map(([id,p])=>
+    `<button class="card perfil" style="--c:${p.cor}" data-act="perfil" data-id="${id}"><b>${p.nome}</b><span>${p.resumo}</span></button>`).join('');
+}
+
 function render(){
+  if(!PERFIL){ $('#app').innerHTML = viewPerfis(); $('#nav').style.display='none'; return; }
+  $('#nav').style.display='';
   const v = {treino:viewTreino, progresso:viewProgresso, corpo:viewCorpo, dados:viewDados}[st.tab];
   $('#app').innerHTML = v();
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b.dataset.tab===st.tab));
@@ -195,7 +221,13 @@ $('#app').addEventListener('click', e=>{
   const b=e.target.closest('[data-act]'); if(!b) return;
   const act=b.dataset.act;
 
-  if(act==='pick'){ st.w=b.dataset.w; render(); window.scrollTo(0,0); }
+  if(act==='perfil'){
+    try{ localStorage.setItem(PERFIL_KEY,b.dataset.id); }catch(e){}
+    setPerfil(b.dataset.id); st.tab='treino'; render(); window.scrollTo(0,0);
+  }
+  else if(act==='trocar'){ sairPerfil(); render(); window.scrollTo(0,0); }
+
+  else if(act==='pick'){ st.w=b.dataset.w; render(); window.scrollTo(0,0); }
 
   else if(act==='chk'){
     const ex=exById(b.dataset.ex), s=db.drafts[st.w].sets[ex.id][+b.dataset.i];
@@ -230,7 +262,7 @@ $('#app').addEventListener('click', e=>{
 
   else if(act==='export'){
     const blob=new Blob([JSON.stringify(db,null,1)],{type:'application/json'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`mais-um-backup-${today()}.json`; a.click();
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`mais-um-${PERFIL.id}-${today()}.json`; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   }
 
@@ -262,4 +294,13 @@ $('#app').addEventListener('change', e=>{
   r.readAsText(file);
 });
 
-render();
+(function init(){
+  let id = null;
+  try{
+    const q = new URLSearchParams(location.search).get('perfil');
+    if(q && PERFIS[q]){ id=q; localStorage.setItem(PERFIL_KEY,q); }
+    else id = localStorage.getItem(PERFIL_KEY);
+  }catch(e){}
+  if(id && PERFIS[id]) setPerfil(id);
+  render();
+})();

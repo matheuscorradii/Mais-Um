@@ -1,9 +1,9 @@
 /* ============================================================
-   PLANO DE TREINO — edite aqui para mudar exercícios/séries/reps
+   PLANO DO MATHEUS — edite aqui para mudar exercícios/séries/reps
    s = séries, r = [reps mínimo, reps máximo], u = 's' para tempo
    semCarga = true quando não usa kg (ex.: prancha)
    ============================================================ */
-const PLAN = {
+const PLAN_MATHEUS = {
   A:{ nome:'Perna', dia:'Segunda · 12h', ex:[
     {id:'leg-press',  n:'Leg press',                     s:3, r:[10,12]},
     {id:'agach',      n:'Agachamento goblet / smith',    s:3, r:[10,10]},
@@ -32,4 +32,3 @@ const PLAN = {
     {id:'abd-polia',  n:'Abdominal na polia / prancha lateral', s:2, r:[12,12]},
   ]},
 };
-const META = { peso:73, gordura:17 };
