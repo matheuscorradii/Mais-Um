@@ -15,7 +15,6 @@ const PERFIS = {
     nome:'Thaís', resumo:'Objetivo 65 kg · Fortalecimento', cor:'#C9B8FF', themeColor:'#FFFFFF',
     plan:PLAN_THAIS,
     meta:{ peso:65 },
-    hojeResumo:true, // tela Hoje com recordes e semana (protótipo da Thaís) em vez de "Última vez"
     aviso:'Foco: fortalecimento e lombar protegida. Exercícios sempre apoiados nas máquinas! Beba de 2,2 a 2,5 L de água por dia.',
   },
 };

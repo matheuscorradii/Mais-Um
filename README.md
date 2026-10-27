@@ -20,8 +20,7 @@ Funciona direto no navegador, sem cadastro, sem servidor e sem dependências. Os
 - Toque em qualquer dia para ver o treino marcado para ele.
 - Card **Treino de hoje** com nome, quantidade de exercícios e séries, e o botão **Começar treino**.
 - Dia sem treino: aviso "Não há treino neste dia" e o atalho **+ Criar novo treino** para aquele dia.
-- **Matheus:** lista "Última vez" com séries, reps e carga de cada exercício.
-- **Thaís:** recordes da semana, treinos feitos na semana (ex.: 2 de 3) e uma frase de incentivo.
+- Recordes da semana, treinos feitos na semana (ex.: 2 de 3) e uma frase de incentivo.
 
 ### Registro do treino
 - Um exercício por vez ("Peito · 1 de 7"), com a faixa **Última vez** e a meta (ex.: 3 × 8–10).

@@ -122,13 +122,14 @@ function viewHoje(){
     : `<p class="hero-t folga">Não há treino neste dia</p>
       <p class="hero-s" style="margin:0">Descanso também faz parte do treino.</p>
       <button class="link hero-link" data-act="novo">+ Criar novo treino para ${nomeDia(st.dia).toLowerCase()}</button></section>`);
-  if(PERFIL.hojeResumo){
+  {
     const nSem=db.sessions.filter(s=>s.date>=dias[0]).length, total=Object.keys(PLAN).length, rec=recordesSemana(dias);
     const falta=total-nSem;
     h += `<div class="duo"><div class="card"><b class="destaque">+${rec}</b><small>recorde${rec===1?'':'s'} esta semana</small></div>
       <div class="card"><b>${Math.min(nSem,total)} de ${total}</b><small>treinos da semana</small></div></div>
       <div class="frase"><b>+1</b><span>${falta>1?`Faltam ${falta} treinos para fechar a semana.`:falta===1?'Só mais um treino e a semana fecha completa.':'Semana completa. Hoje foi +1.'}</span></div>`;
-  } else if(w){
+  }
+  if(w){
     const ult=w.ex.map(ex=>({ex,l:lastOf(ex.id)})).filter(x=>x.l);
     h += `<p class="eyebrow" style="margin-top:20px">Última vez</p>` + (ult.length ? ult.map(({ex,l})=>
       `<div class="card linha"><div><b>${esc(ex.n)}</b><small>${l.sets.length} × ${Math.max(...l.sets.map(s=>s.reps))}${ex.u||''}</small></div>
