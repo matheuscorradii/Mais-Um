@@ -10,14 +10,16 @@ function load(){
   }catch(e){}
   return { sessions:[], body:[], drafts:{}, seeded:false };
 }
+// plano editado no app fica em db.plan (vai junto no backup); sem ele, usa o padrão do perfil
+function applyPlan(){ PLAN = db.plan || PERFIL.plan; if(!PLAN[st.w]) st.w = Object.keys(PLAN)[0]; }
 function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(db)); }
   catch(e){ toast('Não consegui salvar neste navegador'); }
 }
 function setPerfil(id){
-  PERFIL = { id, ...PERFIS[id] }; PLAN = PERFIL.plan; META = PERFIL.meta;
+  PERFIL = { id, ...PERFIS[id] }; META = PERFIL.meta;
   KEY = 'mais-um-v1:' + id;
-  db = load();
+  db = load(); applyPlan();
   if(!db.seeded){ if(PERFIL.seedBody) db.body.push(PERFIL.seedBody); db.seeded = true; save(); }
   document.documentElement.dataset.profile = id;
   document.querySelector('meta[name="theme-color"]').content = PERFIL.themeColor;
@@ -43,7 +45,7 @@ const range = ex => ex.r[0]===ex.r[1] ? `${ex.r[0]}` : `${ex.r[0]}–${ex.r[1]}`
 let toastT;
 function toast(msg){ const t=$('#toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('show'),2000); }
 
-const st = { tab:'treino', w:'A' };
+const st = { tab:'treino', w:'A', edit:false };
 function defaultWorkout(){ const d=new Date().getDay(); return [1,6,0].includes(d)?'A':[2,3].includes(d)?'B':'C'; }
 
 const sortedSessions = () => [...db.sessions].sort((a,b)=> (a.date+a.id).localeCompare(b.date+b.id));
@@ -87,6 +89,7 @@ function viewTreino(){
     <p class="sub">${w.dia} · ${monthCount} treino${monthCount===1?'':'s'} neste mês</p>
     <div class="chips">${Object.entries(PLAN).map(([k,v])=>
       `<button class="chip ${k===st.w?'on':''}" data-act="pick" data-w="${k}"><b>${k}</b><small>${v.nome}</small></button>`).join('')}</div>`;
+  if(st.edit) return h + viewEditar(w);
   if(PERFIL.aviso) h += `<p class="tip">${esc(PERFIL.aviso)}</p>`;
   if(early && PERFIL.dicaInicio) h += `<p class="tip">${esc(PERFIL.dicaInicio)}</p>`;
 
@@ -109,8 +112,27 @@ function viewTreino(){
     h += `<div class="mini"><button class="link" data-act="addset" data-ex="${ex.id}">+ série</button>
       <button class="link" data-act="rmset" data-ex="${ex.id}">− série</button></div></section>`;
   });
-  h += `<button class="btn" data-act="finish">Finalizar treino ${st.w}</button>`;
+  h += `<button class="btn" data-act="finish">Finalizar treino ${st.w}</button>
+    <button class="btn ghost" data-act="edit">Editar plano</button>`;
   return h;
+}
+
+function viewEditar(w){
+  const inp = (i,f,v,mode) => `<input inputmode="${mode}" autocomplete="off" value="${esc(v)}" data-pe="${f}" data-i="${i}">`;
+  let h = `<p class="tip">Editando o treino ${st.w}. O histórico continua ligado a cada exercício.</p>
+    <section class="card"><div class="field"><label>Nome do treino</label>${inp(-1,'nome',w.nome,'text')}</div>
+    <div class="field"><label>Dia</label>${inp(-1,'dia',w.dia,'text')}</div></section>`;
+  w.ex.forEach((ex,i)=>{
+    h += `<section class="card"><div class="field"><label>Exercício</label>${inp(i,'n',ex.n,'text')}</div>
+      <div class="grid4"><div class="field"><label>Séries</label>${inp(i,'s',ex.s,'numeric')}</div>
+      <div class="field"><label>Reps mín.</label>${inp(i,'r0',ex.r[0],'numeric')}</div>
+      <div class="field"><label>Reps máx.</label>${inp(i,'r1',ex.r[1],'numeric')}</div></div>
+      <div class="mini"><button class="link" data-act="exup" data-i="${i}">↑ subir</button>
+      <button class="link" data-act="exdel" data-i="${i}">remover</button></div></section>`;
+  });
+  return h + `<button class="btn ghost" data-act="exadd">+ exercício</button>
+    <button class="btn" data-act="editok">Concluir edição</button>
+    ${db.plan?'<button class="btn danger" data-act="planreset">Voltar ao plano padrão</button>':''}`;
 }
 
 function spark(vals){
@@ -203,6 +225,7 @@ function render(){
 }
 
 /* ============================ eventos ============================ */
+function editPlan(){ if(!db.plan){ db.plan=JSON.parse(JSON.stringify(PERFIL.plan)); applyPlan(); } return db.plan; }
 function exById(id){ for(const w of Object.values(PLAN)){ const e=w.ex.find(x=>x.id===id); if(e) return e; } }
 
 $('#nav').addEventListener('click', e=>{
@@ -211,7 +234,15 @@ $('#nav').addEventListener('click', e=>{
 });
 
 $('#app').addEventListener('input', e=>{
-  const t=e.target; if(!t.dataset.f) return;
+  const t=e.target;
+  if(t.dataset.pe){ // sem render aqui para não perder o foco do campo
+    const w=editPlan()[st.w], f=t.dataset.pe, ex=w.ex[+t.dataset.i];
+    if(f==='nome'||f==='dia') w[f]=t.value;
+    else if(f==='n') ex.n=t.value;
+    else { const n=Math.max(1,Math.round(num(t.value))); if(f==='s') ex.s=n; else ex.r[f==='r0'?0:1]=n; }
+    save(); return;
+  }
+  if(!t.dataset.f) return;
   const sets = db.drafts[st.w].sets[t.dataset.ex];
   sets[+t.dataset.i][t.dataset.f] = t.value;
   save();
@@ -226,6 +257,16 @@ $('#app').addEventListener('click', e=>{
     setPerfil(b.dataset.id); st.tab='treino'; render(); window.scrollTo(0,0);
   }
   else if(act==='trocar'){ sairPerfil(); render(); window.scrollTo(0,0); }
+
+  else if(act==='edit'){ st.edit=true; render(); window.scrollTo(0,0); }
+  else if(act==='editok'){
+    PLAN[st.w].ex.forEach(ex=>{ if(ex.r[0]>ex.r[1]) ex.r.reverse(); if(!ex.n.trim()) ex.n='Exercício'; });
+    st.edit=false; save(); render(); window.scrollTo(0,0); toast('Plano salvo');
+  }
+  else if(act==='exadd'){ editPlan()[st.w].ex.push({id:'ex-'+Date.now(), n:'Novo exercício', s:3, r:[10,12]}); save(); render(); }
+  else if(act==='exdel'){ const a=editPlan()[st.w].ex; if(a.length>1 && confirm(`Remover "${a[+b.dataset.i].n}"? O histórico dele fica guardado.`)){ a.splice(+b.dataset.i,1); save(); render(); } }
+  else if(act==='exup'){ const a=editPlan()[st.w].ex, i=+b.dataset.i; if(i>0){ [a[i-1],a[i]]=[a[i],a[i-1]]; save(); render(); } }
+  else if(act==='planreset'){ if(confirm('Voltar ao plano padrão? Suas edições no plano serão perdidas.')){ delete db.plan; applyPlan(); st.edit=false; save(); render(); } }
 
   else if(act==='pick'){ st.w=b.dataset.w; render(); window.scrollTo(0,0); }
 
@@ -268,7 +309,7 @@ $('#app').addEventListener('click', e=>{
 
   else if(act==='wipe'){
     if(confirm('Apagar TODOS os treinos e medições deste navegador?')){
-      db={ sessions:[], body:[], drafts:{}, seeded:true }; save(); render(); toast('Dados apagados');
+      db={ sessions:[], body:[], drafts:{}, seeded:true }; applyPlan(); save(); render(); toast('Dados apagados');
     }
   }
 });
@@ -289,7 +330,7 @@ $('#app').addEventListener('change', e=>{
   r.onload=()=>{ try{
       const d=JSON.parse(r.result);
       if(!d.sessions||!d.body) throw 0;
-      db={ drafts:{}, seeded:true, ...d }; save(); render(); toast('Backup restaurado');
+      db={ drafts:{}, seeded:true, ...d }; applyPlan(); save(); render(); toast('Backup restaurado');
     }catch(err){ toast('Arquivo inválido'); } };
   r.readAsText(file);
 });
