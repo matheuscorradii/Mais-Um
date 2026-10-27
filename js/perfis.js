@@ -5,16 +5,17 @@
    ============================================================ */
 const PERFIS = {
   matheus:{
-    nome:'Matheus', resumo:'Perna · Peito · Costas', cor:'#c6f432', themeColor:'#0f1112',
+    nome:'Matheus', resumo:'Perna · Peito · Costas', cor:'#6C47FF', themeColor:'#16141F',
     plan:PLAN_MATHEUS,
     meta:{ peso:73, gordura:17, til:'~' },
     seedBody:{ date:'2026-10-26', peso:76.3, gordura:20.6, musculo:57.8, visceral:8 },
     dicaInicio:'Semanas 1–2: cargas leves, 2 séries por exercício se estiver pesado, sempre sobrando ~3 repetições. É a fase de readaptar.',
   },
   thais:{
-    nome:'Thaís', resumo:'Objetivo 65 kg · Fortalecimento', cor:'#8a5cd6', themeColor:'#faf7ff',
+    nome:'Thaís', resumo:'Objetivo 65 kg · Fortalecimento', cor:'#C9B8FF', themeColor:'#FFFFFF',
     plan:PLAN_THAIS,
     meta:{ peso:65 },
+    hojeResumo:true, // tela Hoje com recordes e semana (protótipo da Thaís) em vez de "Última vez"
     aviso:'Foco: fortalecimento e lombar protegida. Exercícios sempre apoiados nas máquinas! Beba de 2,2 a 2,5 L de água por dia.',
   },
 };
