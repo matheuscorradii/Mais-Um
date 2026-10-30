@@ -12,7 +12,7 @@ Funciona direto no navegador, sem cadastro, sem servidor e sem dependências. Os
 
 ### Entrada
 - Tela de abertura com a marca e um botão para cada perfil ("Entrar como Matheus", "Entrar como Thaís").
-- Cada perfil tem plano, metas, visual e dados próprios.
+- Cada perfil tem plano, metas e dados próprios.
 
 ### Hoje
 - Saudação com a data ("Terça, 27 de outubro · Oi, Matheus").
@@ -20,23 +20,23 @@ Funciona direto no navegador, sem cadastro, sem servidor e sem dependências. Os
 - Toque em qualquer dia para ver o treino marcado para ele.
 - Card **Treino de hoje** com nome, quantidade de exercícios e séries, e o botão **Começar treino**.
 - Dia sem treino: aviso "Não há treino neste dia" e o atalho **+ Criar novo treino** para aquele dia.
-- Recordes da semana, treinos feitos na semana (ex.: 2 de 3) e uma frase de incentivo.
+- Recordes da semana e treinos feitos na semana (ex.: 2 de 3).
 
 ### Registro do treino
-- Um exercício por vez ("Peito · 1 de 7"), com a faixa **Última vez** e a meta (ex.: 3 × 8–10).
+- Contador de séries feitas com barra de progresso no topo.
+- O treino inteiro em uma tela só: todos os exercícios com suas séries, para fazer na ordem que quiser.
+- Cada exercício mostra a meta (ex.: 3 × 8–10) e o que você fez na última vez.
 - Dica de progressão: quando você fecha o topo das reps em todas as séries, o app sugere subir a carga.
-- Número grande de repetições com os botões **−1 · +1 · +5 · +10**, ou toque no número e digite.
-- Carga com **− / +** de 2,5 kg, ou digitada.
-- A carga já vem da série anterior (ou da última vez) e as reps repetem as da série anterior. É só ajustar se mudou.
-- **Concluir série** sem contar nada repete as reps da última vez.
-- As séries feitas aparecem em lista; tocar em uma reabre para corrigir.
-- Botão de lista (☰) mostra todos os exercícios do dia com o andamento (0/3, 2/3, ✓), para fazer **fora de ordem** quando a academia está cheia.
+- Cada série tem carga, reps e um **✓**. Os campos sugerem o valor da série anterior ou da última vez; um toque no ✓ confirma a sugestão.
+- Tocar no ✓ de novo reabre a série.
+- **Obs.** em cada exercício: fica guardada e aparece nos próximos treinos.
+- **Editar** em cada exercício e **+ exercício** mudam o plano na hora, sem sair do treino.
 - **+ série / − série** para ajustar o número de séries no dia.
 - Mensagens de incentivo ao concluir série e ao finalizar ("Carga nova: 22,5 kg. Hoje foi +1!", "+1 rep que a última vez. Isso é o mais um!").
 
 ### Progresso
 - Escolha o exercício e alterne entre **Carga** e **Repetições** (ou segundos, nos exercícios por tempo).
-- Gráfico de barras das últimas 8 semanas, com a semana atual em amarelo e a evolução no período ("+10 kg em 8 semanas").
+- Gráfico de barras das últimas 8 semanas, com a semana atual em lavanda e a evolução no período ("+10 kg em 8 semanas").
 - Card **Novo recorde!** com o recorde mais recente.
 - Treinos na semana e **semanas seguidas sem faltar**.
 - Histórico completo do exercício.
@@ -103,6 +103,7 @@ O arquivo `mais-um-<perfil>-<data>.json` guarda:
 - `sessions`: treinos finalizados (exercício → lista de séries com kg e reps).
 - `body`: medições do corpo.
 - `drafts`: treino em andamento, ainda não finalizado.
+- `notes`: observações de cada exercício.
 - `plan`: só existe se o plano foi editado pelo app. Sem ele, vale o plano padrão do código.
 
 Backups de versões anteriores (sem `plan`) continuam restaurando normalmente.
@@ -115,7 +116,7 @@ Backups de versões anteriores (sem `plan`) continuam restaurando normalmente.
 index.html        página única do app
 manifest.json     dados para instalar como app (nome, ícones, cores)
 sw.js             service worker: abre sem internet
-css/style.css     visual (cores da marca, telas, perfil da Thaís)
+css/style.css     visual (cores da marca e telas)
 js/plan.js        plano padrão do Matheus
 js/plan-thais.js  plano padrão da Thaís
 js/perfis.js      perfis: nome, plano, metas, cores e avisos
@@ -171,15 +172,15 @@ Os arquivos CSS e JS são carregados com `?v=N` no `index.html`. Ao publicar mud
 
 | Cor | Hex | Uso |
 |---|---|---|
-| Violeta Mais | `#6C47FF` | marca, botões, destaques |
-| Amarelo +1 | `#FFC82E` | conquistas, recordes, ação principal |
-| Noite | `#16141F` | fundo do app |
-| Grafite | `#2A2733` | cards no escuro |
-| Lilás | `#E9E3FF` | fundos suaves |
+| Violeta Mais | `#5A2DCC` | marca, botões, destaques |
+| Lavanda +1 | `#B9A3F5` | conquistas, recordes, série concluída |
+| Noite | `#2E1A6B` | textos |
+| Branco | `#FFFFFF` | fundo do app, cards |
+| Lilás | `#F1ECFF` / `#EEE8FB` | fundos suaves, barra de navegação |
 
-- **Fontes:** Fredoka (títulos e números) e Nunito (textos), do Google Fonts.
+- **Fonte:** Nunito (títulos em peso forte, textos em regular), do Google Fonts.
 - **Logo:** haltere com anilhas arredondadas, kettlebell com cantos suaves e o "+1" no centro.
-- **Perfil Thaís:** versão clara em branco e lilás.
+- **Perfis:** o visual é o mesmo para todos, em base branca.
 - **Tom de voz:** parceiro de treino, curto, animado e sem cobrança.
 
 Os arquivos de design (`mais-um-identidade.zip`) ficam fora do repositório, pelo `.gitignore`.

@@ -49,6 +49,12 @@ const FRASES_SERIE = ['Boa! Só mais um.','Bateu? Anota.','Série no bolso.','Is
 const FRASES_FIM = ['Hoje foi +1.','Veio, treinou, anotou. É isso.','Mais um treino no bolso.'];
 let fraseN = Math.floor(Math.random()*10);
 const frase = lista => lista[fraseN++ % lista.length]; // gira a lista para não repetir seguido
+// valor sugerido: o da série anterior de hoje, senão o da mesma série na última vez
+function sugestao(ex, sets, i, f){
+  if(i>0){ const v=sets[i-1][f]||sugestao(ex,sets,i-1,f); if(v) return v; }
+  const l=lastOf(ex.id), p=l&&l.sets[Math.min(i,l.sets.length-1)];
+  return p&&p[f] ? (f==='kg'?fmt(p.kg):String(p.reps)) : '';
+}
 function msgSerie(ex, sets, i){
   const s=sets[i], l=lastOf(ex.id), p=l&&l.sets[Math.min(i,l.sets.length-1)], kg=num(s.kg), reps=Math.round(num(s.reps));
   if(p && !ex.semCarga && kg>p.kg) return `Carga nova: ${fmt(kg)} kg. Hoje foi +1!`;
@@ -57,7 +63,7 @@ function msgSerie(ex, sets, i){
   return frase(FRASES_SERIE);
 }
 
-const st = { tab:'treino', w:'A', dia:0, ex:0, lista:false, edit:false, reg:false, pex:'', pmodo:'kg' };
+const st = { tab:'treino', w:'A', dia:0, edit:false, exEdit:null, reg:false, pex:'', pmodo:'kg' };
 // i = 0 (segunda) a 6 (domingo); o dia vem do começo do campo "dia" do treino (ex.: 'Segunda · 12h')
 const nomeDia = i => DIAS[(i+1)%7];
 const treinoDoDia = i => Object.keys(PLAN).find(k=>PLAN[k].dia.split(' ')[0].toLowerCase()===nomeDia(i).toLowerCase());
@@ -124,10 +130,8 @@ function viewHoje(){
       <button class="link hero-link" data-act="novo">+ Criar novo treino para ${nomeDia(st.dia).toLowerCase()}</button></section>`);
   {
     const nSem=db.sessions.filter(s=>s.date>=dias[0]).length, total=Object.keys(PLAN).length, rec=recordesSemana(dias);
-    const falta=total-nSem;
     h += `<div class="duo"><div class="card"><b class="destaque">+${rec}</b><small>recorde${rec===1?'':'s'} esta semana</small></div>
-      <div class="card"><b>${Math.min(nSem,total)} de ${total}</b><small>treinos da semana</small></div></div>
-      <div class="frase"><b>+1</b><span>${falta>1?`Faltam ${falta} treinos para fechar a semana.`:falta===1?'Só mais um treino e a semana fecha completa.':'Semana completa. Hoje foi +1.'}</span></div>`;
+      <div class="card"><b>${Math.min(nSem,total)} de ${total}</b><small>treinos da semana</small></div></div>`;
   }
   if(w){
     const ult=w.ex.map(ex=>({ex,l:lastOf(ex.id)})).filter(x=>x.l);
@@ -145,65 +149,46 @@ function viewTreino(){
     <p class="sub">${esc(w.dia)}</p>` + viewEditar(w);
   const first = sortedSessions()[0];
   const early = !first || (Date.now() - new Date(first.date+'T12:00:00')) < 14*864e5;
-  st.ex = Math.min(st.ex, w.ex.length-1);
-  if(st.lista) return viewLista(w);
-  const ex = w.ex[st.ex], sets = draftSets(st.w, ex), last = lastOf(ex.id), hint = hintFor(ex,last);
-  const cur = sets.findIndex(s=>!s.done), un = ex.u==='s'?'segundos':ex.u==='min'?'minutos':'repetições';
-  const ph = i => last && last.sets[Math.min(i,last.sets.length-1)];
-  const txt = s => ex.semCarga ? `${s.reps}${ex.u||' reps'}` : `${s.reps} reps · ${fmt(num(s.kg))} kg`;
-  // carga sugerida: a da série anterior de hoje, senão a da mesma série na última vez
-  if(cur>=0 && !ex.semCarga && sets[cur].kg===''){ const k = cur ? sets[cur-1].kg : (ph(0)&&ph(0).kg); if(k) sets[cur].kg = fmt(num(k)); }
-  if(cur>0 && sets[cur].reps==='') sets[cur].reps = sets[cur-1].reps; // repete as reps da série anterior; ajusta com −1 ou digitando
-
-  let h = `<div class="reg-top"><button class="voltar" data-act="exprev" aria-label="Voltar">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
-    <div><p class="eyebrow">${esc(w.nome)} · ${st.ex+1} de ${w.ex.length}</p><h1 class="reg-t">${esc(ex.n)}</h1></div>
-    <button class="voltar lista-btn" data-act="lista" aria-label="Ver todos os exercícios do treino">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6h11 M9 12h11 M9 18h11 M4 6h.01 M4 12h.01 M4 18h.01"/></svg></button></div>`;
-  if(st.ex===0 && PERFIL.aviso) h += `<p class="tip">${esc(PERFIL.aviso)}</p>`;
-  if(st.ex===0 && early && PERFIL.dicaInicio) h += `<p class="tip">${esc(PERFIL.dicaInicio)}</p>`;
-  h += `<div class="ultima"><span>Última vez</span><b>${last ? `${last.sets.length} × ${Math.max(...last.sets.map(s=>s.reps))}${ex.u||''}${ex.semCarga?'':' · '+fmt(topKg(last.sets))+' kg'}` : 'Primeira vez'}</b></div>
-    <p class="meta-ex">Meta: ${ex.s} × ${range(ex)}${ex.u||''}</p>${hint?`<p class="hint">${hint}</p>`:''}`;
-  if(cur>=0){
-    const s = sets[cur], p = ph(cur);
-    h += `<div class="contador"><label for="reps">Série ${cur+1} de ${sets.length} · ${un}</label>
-      <input id="reps" class="big" inputmode="numeric" autocomplete="off" placeholder="${p&&p.reps?p.reps:0}" value="${esc(s.reps)}" data-ex="${ex.id}" data-i="${cur}" data-f="reps"></div>
-      ${ex.semCarga?'':`<div class="kg"><button data-act="kg" data-d="-2.5" aria-label="Diminuir carga">−</button>
-        <label><input inputmode="decimal" autocomplete="off" placeholder="0" value="${esc(s.kg)}" data-ex="${ex.id}" data-i="${cur}" data-f="kg" aria-label="Carga em kg"> kg</label>
-        <button data-act="kg" data-d="2.5" aria-label="Aumentar carga">+</button></div>`}
-      <div class="reps-btns"><button class="menos1" data-act="reps" data-n="-1" aria-label="Tirar 1">−1</button>
-        <button class="btn mais1" data-act="reps" data-n="1" aria-label="Somar 1">+1</button>
-        <button class="menos1" data-act="reps" data-n="5" aria-label="Somar 5">+5</button>
-        <button class="menos1" data-act="reps" data-n="10" aria-label="Somar 10">+10</button></div>
-      <button class="btn" data-act="serie">Concluir série</button>`;
-  } else {
-    h += `<p class="tip">Todas as séries feitas. ${st.ex<w.ex.length-1?'Bora para o próximo.':'Agora é só finalizar.'}</p>`;
-  }
-  const feitas = sets.map((s,i)=>({s,i})).filter(x=>x.s.done);
-  h += `<div class="feitas">${feitas.length ? feitas.map(({s,i})=>`<button class="feita" data-act="chk" data-ex="${ex.id}" data-i="${i}" aria-label="Série ${i+1} feita, tocar para refazer">
-      <span class="ok">✓</span><b>Série ${i+1}</b><span>${txt(s)}</span></button>`).join('')
-    : `<p class="empty">Some com +1, +5 ou +10 (−1 corrige). Ou toque no número e digite.</p>`}</div>
-    <div class="mini"><button class="link" data-act="addset" data-ex="${ex.id}">+ série</button>
+  const seta = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>`;
+  const todas = w.ex.flatMap(ex=>draftSets(st.w,ex)), totalSeries = todas.length, feitas = todas.filter(s=>s.done).length;
+  let h = `<div class="reg-top"><button class="voltar" data-act="hoje" aria-label="Voltar">${seta}</button>
+    <div><p class="eyebrow">Treino ${st.w}</p><h1 class="reg-t">${esc(w.nome)}</h1></div>
+    <div class="reg-prog" aria-label="${feitas} de ${totalSeries} séries feitas"><span>${feitas} de ${totalSeries} séries</span><i><u style="width:${totalSeries?Math.round(feitas/totalSeries*100):0}%"></u></i></div></div>`;
+  if(PERFIL.aviso) h += `<p class="tip">${esc(PERFIL.aviso)}</p>`;
+  if(early && PERFIL.dicaInicio) h += `<p class="tip">${esc(PERFIL.dicaInicio)}</p>`;
+  w.ex.forEach((ex,ei)=>{
+    if(st.exEdit===ex.id){ h += `<section class="card">${camposEx(ei,ex)}<button class="btn" data-act="editok">Concluir</button></section>`; return; }
+    const obs = (db.notes&&db.notes[ex.id])||'';
+    const sets = draftSets(st.w, ex), last = lastOf(ex.id), hint = hintFor(ex,last);
+    h += `<section class="card">
+      <header><h3>${esc(ex.n)}</h3><span class="meta">${ex.s} × ${range(ex)}${ex.u||''}</span></header>
+      <p class="last">${last ? 'Última vez ('+fmtDate(last.date)+'): '+last.sets.map(s=>ex.semCarga?`${s.reps}${ex.u||''}`:`${fmt(s.kg)}×${s.reps}`).join(' · ') : 'Primeira vez: anote como foi.'}</p>
+      ${hint?`<p class="hint">${hint}</p>`:''}
+      <textarea class="obs" rows="${obs?2:1}" placeholder="Obs.: ajuste do banco, pegada…" data-obs="${ex.id}" aria-label="Observação de ${esc(ex.n)}">${esc(obs)}</textarea>
+      <div class="cols ${ex.semCarga?'noload':''}"><span>#</span>${ex.semCarga?'':'<span>Carga (kg)</span>'}<span>${ex.u==='s'?'Segundos':ex.u==='min'?'Minutos':'Reps'}</span><span></span></div>`;
+    sets.forEach((s,i)=>{
+      h += `<div class="row ${ex.semCarga?'noload':''} ${s.done?'done':''}"><span class="n">${i+1}</span>
+        ${ex.semCarga?'':`<input inputmode="decimal" autocomplete="off" placeholder="${esc(sugestao(ex,sets,i,'kg'))||'kg'}" value="${esc(s.kg)}" data-ex="${ex.id}" data-i="${i}" data-f="kg" aria-label="Carga da série ${i+1}">`}
+        <input inputmode="numeric" autocomplete="off" placeholder="${esc(sugestao(ex,sets,i,'reps'))||(ex.u||'reps')}" value="${esc(s.reps)}" data-ex="${ex.id}" data-i="${i}" data-f="reps" aria-label="Repetições da série ${i+1}">
+        <button class="chk" data-act="chk" data-ex="${ex.id}" data-i="${i}" aria-label="Concluir série ${i+1}" aria-pressed="${!!s.done}">✓</button></div>`;
+    });
+    h += `<div class="mini"><button class="link" data-act="addset" data-ex="${ex.id}">+ série</button>
       <button class="link" data-act="rmset" data-ex="${ex.id}">− série</button>
-      <button class="link" data-act="edit">Editar plano</button></div>`;
-  h += st.ex < w.ex.length-1
-    ? `<button class="btn ${cur<0?'':'ghost'}" data-act="exnext">Próximo exercício ›</button>
-       <button class="link fim" data-act="finish">Finalizar treino agora</button>`
-    : `<button class="btn plus" data-act="finish">Finalizar treino ${st.w}</button>`;
-  return h;
+      <button class="link ex-editar" data-act="exedit" data-id="${ex.id}">Editar</button></div></section>`;
+  });
+  return h + `<button class="btn ghost" data-act="exadd">+ exercício</button>
+    <button class="btn" data-act="finish">Concluir treino</button>
+    <button class="btn ghost" data-act="edit">Editar plano</button>`;
 }
 
-function viewLista(w){ // academia cheia: escolher qualquer exercício, fora de ordem
-  let h = `<div class="reg-top"><button class="voltar" data-act="lista" aria-label="Voltar ao exercício">
-      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
-    <div><p class="eyebrow">Treino ${st.w}</p><h1 class="reg-t">${esc(w.nome)}</h1></div></div>
-    <p class="sub">Toque em qualquer exercício para fazer agora, na ordem que der.</p>`;
-  w.ex.forEach((ex,i)=>{
-    const sets=(db.drafts[st.w]&&db.drafts[st.w].sets[ex.id])||[], f=sets.filter(s=>s.done).length, tot=sets.length||ex.s;
-    h += `<button class="feita ex-item ${i===st.ex?'atual':''}" data-act="irex" data-i="${i}">
-      <span class="ok ${f>=tot?'':f?'meio':'zero'}">${f>=tot?'✓':i+1}</span><b>${esc(ex.n)}</b><span>${f}/${tot}</span></button>`;
-  });
-  return h + `<button class="btn plus" style="margin-top:14px" data-act="finish">Finalizar treino ${st.w}</button>`;
+function camposEx(i,ex){
+  const inp = (f,v,mode) => `<input inputmode="${mode}" autocomplete="off" value="${esc(v)}" data-pe="${f}" data-i="${i}">`;
+  return `<div class="field"><label>Exercício</label>${inp('n',ex.n,'text')}</div>
+      <div class="grid4 grid3"><div class="field"><label>Séries</label>${inp('s',ex.s,'numeric')}</div>
+      <div class="field"><label>Reps mín.</label>${inp('r0',ex.r[0],'numeric')}</div>
+      <div class="field"><label>Reps máx.</label>${inp('r1',ex.r[1],'numeric')}</div></div>
+      <div class="mini"><button class="link" data-act="exup" data-i="${i}">↑ subir</button>
+      <button class="link" data-act="exdel" data-i="${i}">remover</button></div>`;
 }
 
 function viewEditar(w){
@@ -212,12 +197,7 @@ function viewEditar(w){
     <section class="card"><div class="field"><label>Nome do treino</label>${inp(-1,'nome',w.nome,'text')}</div>
     <div class="field"><label>Dia</label>${inp(-1,'dia',w.dia,'text')}</div></section>`;
   w.ex.forEach((ex,i)=>{
-    h += `<section class="card"><div class="field"><label>Exercício</label>${inp(i,'n',ex.n,'text')}</div>
-      <div class="grid4 grid3"><div class="field"><label>Séries</label>${inp(i,'s',ex.s,'numeric')}</div>
-      <div class="field"><label>Reps mín.</label>${inp(i,'r0',ex.r[0],'numeric')}</div>
-      <div class="field"><label>Reps máx.</label>${inp(i,'r1',ex.r[1],'numeric')}</div></div>
-      <div class="mini"><button class="link" data-act="exup" data-i="${i}">↑ subir</button>
-      <button class="link" data-act="exdel" data-i="${i}">remover</button></div></section>`;
+    h += `<section class="card">${camposEx(i,ex)}</section>`;
   });
   return h + `<button class="btn ghost" data-act="exadd">+ exercício</button>
     <button class="btn" data-act="editok">Concluir edição</button>
@@ -340,7 +320,7 @@ function viewPerfis(){
 
 function render(){
   document.body.classList.toggle('splash', !PERFIL);
-  if(!PERFIL){ document.querySelector('meta[name="theme-color"]').content='#6C47FF'; $('#app').innerHTML = viewPerfis(); $('#nav').style.display='none'; return; }
+  if(!PERFIL){ document.querySelector('meta[name="theme-color"]').content='#5A2DCC'; $('#app').innerHTML = viewPerfis(); $('#nav').style.display='none'; return; }
   $('#nav').style.display='';
   const v = {treino:()=>st.reg?viewTreino():viewHoje(), progresso:viewProgresso, corpo:viewCorpo, dados:viewDados}[st.tab];
   $('#app').innerHTML = v();
@@ -353,7 +333,7 @@ function exById(id){ for(const w of Object.values(PLAN)){ const e=w.ex.find(x=>x
 
 $('#nav').addEventListener('click', e=>{
   const b=e.target.closest('button'); if(!b) return;
-  st.tab=b.dataset.tab; st.reg=false; st.edit=false; st.lista=false; render(); window.scrollTo(0,0);
+  st.tab=b.dataset.tab; st.reg=false; st.edit=false; render(); window.scrollTo(0,0);
 });
 
 $('#app').addEventListener('input', e=>{
@@ -363,6 +343,11 @@ $('#app').addEventListener('input', e=>{
     if(f==='nome'||f==='dia') w[f]=t.value;
     else if(f==='n') ex.n=t.value;
     else { const n=Math.max(1,Math.round(num(t.value))); if(f==='s') ex.s=n; else ex.r[f==='r0'?0:1]=n; }
+    save(); return;
+  }
+  if(t.dataset.obs){ // fora do plano: vale para o exercício em qualquer treino e vai no backup
+    db.notes=db.notes||{};
+    if(t.value.trim()) db.notes[t.dataset.obs]=t.value; else delete db.notes[t.dataset.obs];
     save(); return;
   }
   if(!t.dataset.f) return;
@@ -381,12 +366,17 @@ $('#app').addEventListener('click', e=>{
   }
   else if(act==='trocar'){ sairPerfil(); render(); window.scrollTo(0,0); }
 
+  else if(act==='exedit'){ st.exEdit=b.dataset.id; render(); }
   else if(act==='edit'){ st.edit=true; render(); window.scrollTo(0,0); }
   else if(act==='editok'){
-    PLAN[st.w].ex.forEach(ex=>{ if(ex.r[0]>ex.r[1]) ex.r.reverse(); if(!ex.n.trim()) ex.n='Exercício'; });
-    st.edit=false; save(); render(); window.scrollTo(0,0); toast('Plano salvo');
+    PLAN[st.w].ex.forEach(ex=>{ if(ex.r[0]>ex.r[1]) ex.r.reverse(); if(!ex.n.trim()) ex.n='Exercício';
+      // treino em andamento acompanha as séries novas; só tira série vazia, nunca o que já foi anotado
+      const d=db.drafts[st.w]&&db.drafts[st.w].sets[ex.id];
+      if(d){ while(d.length<ex.s) d.push({kg:'',reps:'',done:false});
+        while(d.length>ex.s && !d[d.length-1].done && !d[d.length-1].reps && !d[d.length-1].kg) d.pop(); } });
+    const noCard=st.exEdit; st.edit=false; st.exEdit=null; save(); render(); if(!noCard) window.scrollTo(0,0); toast('Plano salvo');
   }
-  else if(act==='exadd'){ editPlan()[st.w].ex.push({id:'ex-'+Date.now(), n:'Novo exercício', s:3, r:[10,12]}); save(); render(); }
+  else if(act==='exadd'){ const id='ex-'+Date.now(); editPlan()[st.w].ex.push({id, n:'Novo exercício', s:3, r:[10,12]}); if(!st.edit) st.exEdit=id; save(); render(); }
   else if(act==='exdel'){ const a=editPlan()[st.w].ex; if(a.length>1 && confirm(`Remover "${a[+b.dataset.i].n}"? O histórico dele fica guardado.`)){ a.splice(+b.dataset.i,1); save(); render(); } }
   else if(act==='exup'){ const a=editPlan()[st.w].ex, i=+b.dataset.i; if(i>0){ [a[i-1],a[i]]=[a[i],a[i-1]]; save(); render(); } }
   else if(act==='planreset'){ if(confirm('Voltar ao plano padrão? Suas edições no plano serão perdidas.')){ delete db.plan; applyPlan(); st.edit=false; save(); render(); } }
@@ -395,44 +385,28 @@ $('#app').addEventListener('click', e=>{
   else if(act==='novo'){
     const p=editPlan(), k=[...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].find(l=>!p[l]);
     p[k]={ nome:'Novo treino', dia:nomeDia(st.dia), ex:[{id:'ex-'+Date.now(), n:'Novo exercício', s:3, r:[10,12]}] };
-    st.w=k; st.ex=0; st.reg=true; st.edit=true; save(); render(); window.scrollTo(0,0);
+    st.w=k; st.reg=true; st.edit=true; save(); render(); window.scrollTo(0,0);
   }
   else if(act==='treinodel'){
     if(confirm(`Excluir o treino ${st.w} (${PLAN[st.w].nome})? O histórico dos exercícios fica guardado.`)){
       delete editPlan()[st.w]; delete db.drafts[st.w]; applyPlan(); st.edit=false; st.reg=false; save(); render(); window.scrollTo(0,0);
     }
   }
-  else if(act==='start'){ st.w=b.dataset.w; st.ex=0; st.lista=false; st.reg=true; render(); window.scrollTo(0,0); }
+  else if(act==='start'){ st.w=b.dataset.w; st.exEdit=null; st.reg=true; render(); window.scrollTo(0,0); }
   else if(act==='hoje'){ st.reg=false; st.edit=false; render(); window.scrollTo(0,0); }
 
   else if(act==='chk'){
-    const ex=exById(b.dataset.ex), s=db.drafts[st.w].sets[ex.id][+b.dataset.i];
-    s.done=!s.done;
-    if(s.done){ // um toque repete a última vez, se não digitou nada
-      const last=lastOf(ex.id), ph=last&&last.sets[Math.min(+b.dataset.i,last.sets.length-1)];
-      if(ph){ if(!s.kg && ph.kg && !ex.semCarga) s.kg=String(ph.kg); if(!s.reps && ph.reps) s.reps=String(ph.reps); }
-    }
+    const ex=exById(b.dataset.ex), sets=db.drafts[st.w].sets[ex.id], i=+b.dataset.i, s=sets[i];
+    if(!s.done){ // um toque repete a sugestão, se não digitou nada
+      if(!s.kg && !ex.semCarga) s.kg=sugestao(ex,sets,i,'kg');
+      if(!s.reps) s.reps=sugestao(ex,sets,i,'reps');
+      if(!num(s.reps)){ toast('Digite as repetições'); return; }
+      s.done=true; toast(msgSerie(ex,sets,i));
+    } else s.done=false;
     save(); render();
   }
 
   else if(act==='pmodo'){ st.pmodo=b.dataset.m; render(); }
-  else if(act==='lista'){ st.lista=!st.lista; render(); window.scrollTo(0,0); }
-  else if(act==='irex'){ st.ex=+b.dataset.i; st.lista=false; render(); window.scrollTo(0,0); }
-  else if(act==='exnext'){ st.ex++; render(); window.scrollTo(0,0); }
-  else if(act==='exprev'){ if(st.ex>0) st.ex--; else st.reg=false; render(); window.scrollTo(0,0); }
-  else if(act==='reps'||act==='kg'||act==='serie'){
-    const ex=PLAN[st.w].ex[st.ex], sets=draftSets(st.w,ex), i=sets.findIndex(x=>!x.done), s=sets[i];
-    if(!s) return;
-    if(act==='reps') s.reps=String(Math.max(0,Math.round(num(s.reps))+ +b.dataset.n));
-    else if(act==='kg') s.kg=fmt(Math.max(0, num(s.kg)+ +b.dataset.d));
-    else {
-      if(!num(s.reps)){ const l=lastOf(ex.id), p=l&&l.sets[Math.min(i,l.sets.length-1)];
-        if(p&&p.reps) s.reps=String(p.reps); else { toast('Conte as repetições com +1 ou digite'); return; } }
-      s.done=true;
-      toast(msgSerie(ex, sets, i));
-    }
-    save(); render();
-  }
   else if(act==='addset'){ db.drafts[st.w].sets[b.dataset.ex].push({kg:'',reps:'',done:false}); save(); render(); }
   else if(act==='rmset'){ const a=db.drafts[st.w].sets[b.dataset.ex]; if(a.length>1){ a.pop(); save(); render(); } }
 
