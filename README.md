@@ -10,17 +10,20 @@ Funciona direto no navegador, sem cadastro, sem servidor e sem dependências. Os
 
 ## Funcionalidades
 
-### Entrada
-- Tela de abertura com a marca e um botão para cada perfil ("Entrar como Matheus", "Entrar como Thaís").
-- Cada perfil tem plano, metas e dados próprios.
+### Primeira abertura
+- Cada pessoa usa o app no próprio celular. Na primeira vez, digita o nome e já cai no editor para montar o próprio treino, começando em branco.
+- **Já tenho backup**: restaura um backup e entra direto com os treinos, o plano e o nome dele.
+- Ninguém vê o treino de outra pessoa: tudo fica só no aparelho.
 
 ### Hoje
-- Saudação com a data ("Terça, 27 de outubro · Oi, Matheus").
-- Faixa da semana (S T Q Q S S D): o dia de hoje fica destacado e um ponto marca os dias em que você treinou.
-- Toque em qualquer dia para ver o treino marcado para ele.
-- Card **Treino de hoje** com nome, quantidade de exercícios e séries, e o botão **Começar treino**.
-- Dia sem treino: aviso "Não há treino neste dia" e o atalho **+ Criar novo treino** para aquele dia.
+- Saudação com a data ("Sexta, 6 de novembro · Oi, Ana").
+- Faixa da semana (S T Q Q S S D): um ponto marca os dias em que você treinou. Tocar em outro dia mostra o que foi feito nele (exercícios e séries). Treino só começa no dia de hoje.
+- O dia é livre: **Vamos treinar hoje?** lista todos os treinos, com o que já foi feito na semana (✓), a última vez de cada um e o **Próximo** sugerido.
+- Escolher um treino que você já fez esta semana mostra "Você já treinou … esta semana", com **Ok** (treinar mesmo assim) e **Trocar de treino**.
+- Treino começado e não finalizado aparece como **Continuar treino**.
+- **+ Criar novo treino**.
 - Recordes da semana e treinos feitos na semana (ex.: 2 de 3).
+- Lembrete quando passa de 14 dias sem backup.
 
 ### Registro do treino
 - Contador de séries feitas com barra de progresso no topo.
@@ -44,18 +47,18 @@ Funciona direto no navegador, sem cadastro, sem servidor e sem dependências. Os
 
 ### Corpo
 - Registro de peso, gordura (%), massa muscular e gordura visceral.
-- Peso e gordura atuais comparados com a meta do perfil.
+- Peso e gordura atuais comparados com as suas metas (definidas em Dados).
 - Histórico com a variação entre medições.
 
 ### Dados
 - **Baixar backup (.json)** e **Restaurar backup**.
-- Trocar de perfil.
-- Apagar todos os dados do perfil.
+- Data do último backup e dica para instalar o app.
+- Seu nome e suas metas de peso e gordura.
+- Apagar todos os dados: o app volta para a primeira abertura.
 
 ### Editar o plano pelo app
-- No registro, **Editar plano**: troque nome e dia do treino, nome do exercício, séries e reps mínimas/máximas.
+- No registro, **Editar plano**: troque o nome do treino, nome do exercício, séries e reps mínimas/máximas.
 - Suba exercícios na ordem, adicione, remova ou exclua o treino inteiro.
-- **Voltar ao plano padrão** desfaz todas as edições.
 - O histórico continua ligado a cada exercício mesmo depois de renomear.
 
 ---
@@ -65,27 +68,27 @@ Funciona direto no navegador, sem cadastro, sem servidor e sem dependências. Os
 O app precisa estar publicado em um endereço **https://** (por exemplo, GitHub Pages).
 
 1. Abra o endereço no Chrome (Android) ou no Safari (iPhone).
-2. Escolha o perfil.
+2. Digite seu nome e escolha o plano inicial.
 3. Instale na tela inicial:
    - **Android / Chrome:** menu ⋮ → **Instalar app**.
    - **iPhone / Safari:** compartilhar → **Adicionar à Tela de Início**.
 
 Depois de instalado, ele abre em tela cheia, como um app, e funciona sem internet usando a última versão carregada.
 
-Para abrir direto em um perfil, use `?perfil=matheus` ou `?perfil=thais` no fim do endereço.
 
 ---
 
 ## Seus dados
 
 - Tudo fica no **armazenamento do navegador** (localStorage) do aparelho. Nada é enviado para nenhum servidor.
-- Cada perfil tem seus dados separados.
+- Cada celular tem um perfil, com dados só dele. Ninguém vê o treino do outro.
+- **iPhone:** instale na tela inicial. Sem isso, o Safari pode apagar os dados de um site que fica cerca de 7 dias sem ser aberto.
 - Dados de um aparelho **não aparecem** em outro. Para trocar de celular, baixe o backup em um e restaure no outro.
 - Limpar os dados do navegador apaga os treinos. **Baixe o backup com frequência.**
 
 ### Formato do backup
 
-O arquivo `mais-um-<perfil>-<data>.json` guarda:
+O arquivo `mais-um-<nome>-<data>.json` guarda:
 
 ```json
 {
@@ -104,7 +107,9 @@ O arquivo `mais-um-<perfil>-<data>.json` guarda:
 - `body`: medições do corpo.
 - `drafts`: treino em andamento, ainda não finalizado.
 - `notes`: observações de cada exercício.
-- `plan`: só existe se o plano foi editado pelo app. Sem ele, vale o plano padrão do código.
+- `perfil`: nome e metas.
+- `plan`: o plano de treino da pessoa.
+- `backup`: data do último backup.
 
 Backups de versões anteriores (sem `plan`) continuam restaurando normalmente.
 
@@ -117,19 +122,19 @@ index.html        página única do app
 manifest.json     dados para instalar como app (nome, ícones, cores)
 sw.js             service worker: abre sem internet
 css/style.css     visual (cores da marca e telas)
-js/plan.js        plano padrão do Matheus
-js/plan-thais.js  plano padrão da Thaís
-js/perfis.js      perfis: nome, plano, metas, cores e avisos
+js/plan.js        plano antigo do Matheus (só para migrar)
+js/plan-thais.js  plano antigo da Thaís (só para migrar)
+js/perfis.js      plano inicial em branco e migração dos perfis antigos
 js/app.js         telas, regras e armazenamento
 img/              ícones do app (SVG e PNG 192/512)
 ```
 
-### Editar o plano padrão pelo código
+### Formato do plano
 
-Em `js/plan.js` (ou `js/plan-thais.js`):
+Cada pessoa monta o plano pelo app. No backup, ele fica em `plan`:
 
 ```js
-A:{ nome:'Perna', dia:'Segunda · 12h', ex:[
+A:{ nome:'Perna', ex:[
   {id:'leg-press', n:'Leg press', s:3, r:[10,12]},
   {id:'prancha',   n:'Prancha',   s:2, r:[30,40], u:'s', semCarga:true},
 ]},
@@ -138,7 +143,6 @@ A:{ nome:'Perna', dia:'Segunda · 12h', ex:[
 | Campo | Significado |
 |---|---|
 | `nome` | nome do treino |
-| `dia` | dia da semana no começo do texto (`Segunda`, `Terça`…). Define em que dia o treino aparece na tela Hoje |
 | `id` | identificador do exercício. **Não mude**: o histórico é ligado a ele |
 | `n` | nome do exercício |
 | `s` | número de séries |
@@ -146,9 +150,15 @@ A:{ nome:'Perna', dia:'Segunda · 12h', ex:[
 | `u` | `'s'` para segundos, `'min'` para minutos |
 | `semCarga` | `true` para exercícios sem peso (prancha, abdominal) |
 
-### Adicionar um perfil
+---|---|
+| `nome` | nome do treino |
+| `id` | identificador do exercício. **Não mude**: o histórico é ligado a ele |
+| `n` | nome do exercício |
+| `s` | número de séries |
+| `r` | reps mínimas e máximas |
+| `u` | `'s'` para segundos, `'min'` para minutos |
+| `semCarga` | `true` para exercícios sem peso (prancha, abdominal) |
 
-Em `js/perfis.js`, copie um perfil existente, troque o nome, o plano e as metas. O botão "Entrar como…" aparece sozinho na tela de abertura.
 
 ---
 

@@ -2,34 +2,35 @@
 const PERFIL_KEY = 'mais-um-perfil';
 let PERFIL = null, PLAN = {}, META = {}, KEY = '', db = null;
 
-function load(){
+// um perfil por aparelho: db.perfil (nome, metas) e db.plan (plano da pessoa) vão juntos no backup
+function load(id){
   try{
     let raw = localStorage.getItem(KEY);
-    if(!raw && PERFIL.id==='matheus') raw = localStorage.getItem('meu-treino-v1'); // versão antiga
+    if(!raw && id==='matheus') raw = localStorage.getItem('meu-treino-v1'); // versão antiga
     const d = JSON.parse(raw); if(d && d.sessions) return d;
   }catch(e){}
-  return { sessions:[], body:[], drafts:{}, seeded:false };
+  return { sessions:[], body:[], drafts:{}, seeded:true };
 }
-// plano editado no app fica em db.plan (vai junto no backup); sem ele, usa o padrão do perfil
-function applyPlan(){ PLAN = db.plan || PERFIL.plan; if(!PLAN[st.w]) st.w = Object.keys(PLAN)[0]; }
+const copia = o => JSON.parse(JSON.stringify(o));
+function applyPlan(){ PLAN = db.plan; if(!PLAN[st.w]) st.w = Object.keys(PLAN)[0]; }
 function save(){
   try{ localStorage.setItem(KEY, JSON.stringify(db)); }
   catch(e){ toast('Não consegui salvar neste navegador'); }
 }
-function setPerfil(id){
-  PERFIL = { id, ...PERFIS[id] }; META = PERFIL.meta;
-  KEY = 'mais-um-v1:' + id;
-  db = load(); applyPlan();
-  if(!db.seeded){ if(PERFIL.seedBody) db.body.push(PERFIL.seedBody); db.seeded = true; save(); }
-  document.documentElement.dataset.profile = id;
-  document.querySelector('meta[name="theme-color"]').content = PERFIL.themeColor;
-  st.dia = (new Date().getDay()+6)%7; st.w = treinoDoDia(st.dia) || st.w;
+function setPerfil(id){ // false = ainda não há perfil neste aparelho (vai para a primeira abertura)
+  KEY = 'mais-um-v1:' + id; db = load(id);
+  const leg = LEGADO[id]; // quem já usava: os dados antigos ganham nome, metas e plano
+  if(!db.perfil && leg){ db.perfil = { nome:leg.nome, meta:copia(leg.meta), aviso:leg.aviso, dicaInicio:leg.dicaInicio }; save(); }
+  if(db.perfil && !db.plan){ db.plan = copia(leg ? leg.plan : PLANO_INICIAL); save(); }
+  if(!db.perfil){ PERFIL = null; return false; }
+  PERFIL = db.perfil; META = PERFIL.meta = PERFIL.meta || {};
+  applyPlan(); return true;
 }
-function sairPerfil(){
-  PERFIL = null; db = null;
-  try{ localStorage.removeItem(PERFIL_KEY); }catch(e){}
-  try{ history.replaceState(null,'',location.pathname); }catch(e){}
-  document.documentElement.removeAttribute('data-profile');
+function criarPerfil(nome){
+  try{ localStorage.setItem(PERFIL_KEY, 'eu'); }catch(e){}
+  KEY = 'mais-um-v1:eu';
+  db = { sessions:[], body:[], drafts:{}, seeded:true, perfil:{ nome, meta:{} }, plan:copia(PLANO_INICIAL) };
+  save(); setPerfil('eu');
 }
 
 /* ============================ helpers ============================ */
@@ -63,10 +64,7 @@ function msgSerie(ex, sets, i){
   return frase(FRASES_SERIE);
 }
 
-const st = { tab:'treino', w:'A', dia:0, edit:false, exEdit:null, reg:false, pex:'', pmodo:'kg' };
-// i = 0 (segunda) a 6 (domingo); o dia vem do começo do campo "dia" do treino (ex.: 'Segunda · 12h')
-const nomeDia = i => DIAS[(i+1)%7];
-const treinoDoDia = i => Object.keys(PLAN).find(k=>PLAN[k].dia.split(' ')[0].toLowerCase()===nomeDia(i).toLowerCase());
+const st = { tab:'treino', w:'A', edit:false, exEdit:null, reg:false, repetido:null, dia:null, onboard:false, pex:'', pmodo:'kg' };
 
 const sortedSessions = () => [...db.sessions].sort((a,b)=> (a.date+a.id).localeCompare(b.date+b.id));
 function historyOf(exId){
@@ -115,38 +113,52 @@ function recordesSemana(dias){ // exercícios cuja carga desta semana passou a m
   return n;
 }
 
+const feitosSemana = () => new Set(db.sessions.filter(s=>s.date>=semana()[0]).map(s=>s.workout));
+const emAndamento = () => Object.keys(PLAN).find(k=>db.drafts[k] && Object.values(db.drafts[k].sets).some(a=>a.some(s=>s.done||s.reps||s.kg)));
+const diasDesde = iso => Math.floor((new Date(today()+'T12:00:00') - new Date(iso+'T12:00:00'))/864e5);
+
+// o dia é livre: a pessoa escolhe o treino quando chega; repetir na semana pede confirmação
 function viewHoje(){
-  const k=treinoDoDia(st.dia), w=k&&PLAN[k], hoje=new Date(), dias=semana(), feitos=new Set(db.sessions.map(s=>s.date));
-  const rotulo = dias[st.dia]===today() ? 'Treino de hoje' : `Treino de ${nomeDia(st.dia).toLowerCase()}`;
+  const hoje=new Date(), dias=semana(), treinou=new Set(db.sessions.map(s=>s.date)), feitos=feitosSemana(), ks=Object.keys(PLAN);
+  const andando=emAndamento(), prox=ks.find(k=>!feitos.has(k));
   let h = `<div class="hoje-top"><div><p class="sub">${DIAS[hoje.getDay()]}, ${hoje.getDate()} de ${MESES[hoje.getMonth()]}</p>
-      <h1>Oi, ${esc(PERFIL.nome)}</h1></div><div class="avatar" style="background:${PERFIL.cor}">${esc(PERFIL.nome[0])}</div></div>
-    <div class="semana">${dias.map((d,i)=>`<button class="${i===st.dia?'on':''} ${d===today()?'hj':''}" data-act="dia" data-i="${i}" aria-label="${nomeDia(i)}${treinoDoDia(i)?'':', sem treino'}" aria-pressed="${i===st.dia}"><span>${'STQQSSD'[i]}</span><i class="${feitos.has(d)?'f':''}"></i></button>`).join('')}</div>
-    <section class="hero"><div class="hero-bg" aria-hidden="true">+1</div>
-      <p class="eyebrow">${rotulo}</p>` + (w ? `<p class="hero-t">${esc(w.nome)}</p>
-      <p class="hero-s">Treino ${k} · ${w.ex.length} exercícios · ${w.ex.reduce((t,ex)=>t+ex.s,0)} séries</p>
-      <button class="btn plus" data-act="start" data-w="${k}">Começar treino</button></section>`
-    : `<p class="hero-t folga">Não há treino neste dia</p>
-      <p class="hero-s" style="margin:0">Descanso também faz parte do treino.</p>
-      <button class="link hero-link" data-act="novo">+ Criar novo treino para ${nomeDia(st.dia).toLowerCase()}</button></section>`);
-  {
-    const nSem=db.sessions.filter(s=>s.date>=dias[0]).length, total=Object.keys(PLAN).length, rec=recordesSemana(dias);
-    h += `<div class="duo"><div class="card"><b class="destaque">+${rec}</b><small>recorde${rec===1?'':'s'} esta semana</small></div>
-      <div class="card"><b>${Math.min(nSem,total)} de ${total}</b><small>treinos da semana</small></div></div>`;
+      <h1>Oi, ${esc(PERFIL.nome)}</h1></div><div class="avatar" aria-hidden="true">${esc(PERFIL.nome[0])}</div></div>
+    <div class="semana">${dias.map((d,i)=>{ const sel = st.dia===null ? d===today() : i===st.dia, nome=DIAS[new Date(d+'T12:00:00').getDay()];
+      return `<button class="${sel?'on':''} ${d===today()?'hj':''}" data-act="dia" data-i="${i}" aria-pressed="${sel}" aria-label="${nome}${d===today()?', hoje':''}${treinou.has(d)?', com treino':''}"><span>${'STQQSSD'[i]}</span><i class="${treinou.has(d)?'f':''}"></i></button>`; }).join('')}</div>
+    <section class="hero"><div class="hero-bg" aria-hidden="true">+1</div>`;
+  if(st.dia!==null){ // outro dia: só consulta o que foi feito, sem começar treino
+    const d=dias[st.dia], doDia=sortedSessions().filter(s=>s.date===d), futuro=d>today();
+    h += `<p class="eyebrow">${DIAS[new Date(d+'T12:00:00').getDay()]}, ${fmtDate(d)}</p>
+      <p class="hero-t folga">${doDia.length ? doDia.map(s=>`Treino ${esc(s.workout)}${PLAN[s.workout]?' · '+esc(PLAN[s.workout].nome):''}`).join(' + ') : futuro ? 'Esse dia ainda não chegou' : 'Nenhum treino neste dia'}</p>
+      ${doDia.map(s=>`<ul class="dia-ex">${Object.entries(s.sets).map(([id,sets])=>{ const ex=exById(id);
+        return `<li><b>${esc(ex?ex.n:id)}</b><span>${sets.map(x=>ex&&ex.semCarga?`${x.reps}${ex.u||''}`:`${fmt(x.kg)}×${x.reps}`).join(' · ')}</span></li>`; }).join('')}</ul>`).join('')}
+      <button class="btn plus" data-act="dia" data-i="hoje">Voltar para hoje</button></section>`;
+  } else if(st.repetido && PLAN[st.repetido]){
+    h += `<p class="eyebrow">Treino ${st.repetido}</p><p class="hero-t folga">Você já treinou ${esc(PLAN[st.repetido].nome)} esta semana</p>
+      <div class="hero-acoes"><button class="btn plus" data-act="start" data-w="${st.repetido}">Ok</button>
+      <button class="btn out" data-act="trocartreino">Trocar de treino</button></div></section>`;
+  } else {
+    h += `<p class="eyebrow">${treinou.has(today())?'Treino de hoje feito ✓':'Treino de hoje'}</p><p class="hero-t folga">Vamos treinar hoje?</p>`
+      + (andando ? `<button class="btn plus" data-act="start" data-w="${andando}">Continuar treino ${andando} · ${esc(PLAN[andando].nome)}</button>` : '')
+      + `<div class="escolha">${ks.map(k=>{ const w=PLAN[k], l=[...sortedSessions()].reverse().find(s=>s.workout===k);
+        return `<button class="opcao" data-act="escolher" data-w="${k}"><b>${k}</b><span><strong>${esc(w.nome)}</strong>
+          <small>${w.ex.length} exercícios · ${feitos.has(k)?'feito esta semana':l?'última vez '+fmtDate(l.date):'ainda não feito'}</small></span>
+          ${feitos.has(k)?'<i aria-hidden="true">✓</i>':k===prox?'<em>Próximo</em>':''}</button>`; }).join('')}</div>
+      <button class="link hero-link" data-act="novo">+ Criar novo treino</button></section>`;
   }
-  if(w){
-    const ult=w.ex.map(ex=>({ex,l:lastOf(ex.id)})).filter(x=>x.l);
-    h += `<p class="eyebrow" style="margin-top:20px">Última vez</p>` + (ult.length ? ult.map(({ex,l})=>
-      `<div class="card linha"><div><b>${esc(ex.n)}</b><small>${l.sets.length} × ${Math.max(...l.sets.map(s=>s.reps))}${ex.u||''}</small></div>
-      <span>${ex.semCarga?'':fmt(topKg(l.sets))+' kg'}</span></div>`).join('') : `<p class="empty">Primeiro treino ${st.w}: anote como foi.</p>`);
-  }
+  const nSem=feitos.size, total=ks.length, rec=recordesSemana(dias);
+  h += `<div class="duo"><div class="card"><b class="destaque">+${rec}</b><small>recorde${rec===1?'':'s'} esta semana</small></div>
+    <div class="card"><b>${Math.min(nSem,total)} de ${total}</b><small>treinos da semana</small></div></div>`;
+  const base = db.backup || (db.sessions.length && sortedSessions()[0].date), sem = base ? diasDesde(base) : 0;
+  if(sem>=14) h += `<p class="tip lembrete">Faz ${sem} dias sem backup. Seus treinos só existem neste aparelho.
+    <button class="link" data-act="irdados">Fazer backup</button></p>`;
   return h;
 }
 
 
 function viewTreino(){
   const w = PLAN[st.w];
-  if(st.edit) return `<button class="link" data-act="hoje">‹ Hoje</button><h1>Treino ${st.w} · ${esc(w.nome)}</h1>
-    <p class="sub">${esc(w.dia)}</p>` + viewEditar(w);
+  if(st.edit) return `<button class="link" data-act="hoje">‹ Hoje</button><h1>Treino ${st.w} · ${esc(w.nome)}</h1>` + viewEditar(w);
   const first = sortedSessions()[0];
   const early = !first || (Date.now() - new Date(first.date+'T12:00:00')) < 14*864e5;
   const seta = `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>`;
@@ -194,15 +206,13 @@ function camposEx(i,ex){
 function viewEditar(w){
   const inp = (i,f,v,mode) => `<input inputmode="${mode}" autocomplete="off" value="${esc(v)}" data-pe="${f}" data-i="${i}">`;
   let h = `<p class="tip">Editando o treino ${st.w}. O histórico continua ligado a cada exercício.</p>
-    <section class="card"><div class="field"><label>Nome do treino</label>${inp(-1,'nome',w.nome,'text')}</div>
-    <div class="field"><label>Dia</label>${inp(-1,'dia',w.dia,'text')}</div></section>`;
+    <section class="card"><div class="field"><label>Nome do treino</label>${inp(-1,'nome',w.nome,'text')}</div></section>`;
   w.ex.forEach((ex,i)=>{
     h += `<section class="card">${camposEx(i,ex)}</section>`;
   });
   return h + `<button class="btn ghost" data-act="exadd">+ exercício</button>
     <button class="btn" data-act="editok">Concluir edição</button>
-    ${Object.keys(PLAN).length>1?'<button class="btn danger" data-act="treinodel">Excluir este treino</button>':''}
-    ${db.plan?'<button class="btn danger" data-act="planreset">Voltar ao plano padrão</button>':''}`;
+    ${Object.keys(PLAN).length>1?'<button class="btn danger" data-act="treinodel">Excluir este treino</button>':''}`;
 }
 
 const semanaDe = iso => { const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()-(d.getDay()+6)%7); return isoOf(d); };
@@ -267,22 +277,35 @@ function listaSessoes(){
     <button class="link" data-act="delsess" data-id="${esc(x.id)}">excluir</button></li>`).join('')}</ul></details>`;
 }
 
-function viewCorpo(){
-  const list = [...db.body].sort((a,b)=>b.date.localeCompare(a.date));
-  const cur = list[0] || {};
-  let h = `<p class="eyebrow">Seu corpo</p><h1>Corpo</h1><p class="sub">Meça sempre nas mesmas condições (manhã, em jejum, após ir ao banheiro).</p>
-  <section class="card"><div class="goal">
-    <div><small>Peso atual</small><b>${cur.peso?fmt(cur.peso)+' kg':'—'}</b><small>meta ${META.til||''}${META.peso} kg</small></div>
-    ${META.gordura?`<div><small>Gordura atual</small><b>${cur.gordura?fmt(cur.gordura)+'%':'—'}</b><small>meta ${META.til||''}${META.gordura}%</small></div>`:''}
-  </div></section>
-  <section class="card"><h3 style="margin-bottom:10px">Nova medição</h3>
-    <form id="bodyForm"><div class="grid4">
+function formCorpo(extra='', botao='Salvar medição'){
+  return `<form id="bodyForm"><div class="grid4">
       <div class="field"><label>Data</label><input type="date" name="date" value="${today()}" required></div>
       <div class="field"><label>Peso (kg)</label><input name="peso" inputmode="decimal" placeholder="ex.: 75,8" required></div>
       <div class="field"><label>Gordura (%)</label><input name="gordura" inputmode="decimal" placeholder="opcional"></div>
       <div class="field"><label>Massa muscular (kg)</label><input name="musculo" inputmode="decimal" placeholder="opcional"></div>
-      <div class="field"><label>Gordura visceral</label><input name="visceral" inputmode="decimal" placeholder="opcional"></div>
-    </div><button class="btn" style="margin-top:12px" type="submit">Salvar medição</button></form></section>
+      <div class="field"><label>Gordura visceral</label><input name="visceral" inputmode="decimal" placeholder="opcional"></div>${extra}
+    </div><button class="btn" style="margin-top:12px" type="submit">${botao}</button></form>`;
+}
+// fim do cadastro: depois do corpo, o editor do primeiro treino
+function irEditor(){
+  st.onboard=false; st.tab='treino'; st.w='A'; st.reg=true; st.edit=true; render(); window.scrollTo(0,0);
+  toast('Agora monte seu primeiro treino.');
+}
+
+function viewCorpo(){
+  const list = [...db.body].sort((a,b)=>b.date.localeCompare(a.date));
+  const cur = list[0] || {};
+  if(st.onboard) return `<p class="eyebrow">Passo 1 de 2</p><h1>Seu corpo hoje</h1>
+    <p class="sub">Registre como você está agora para acompanhar a evolução. Meça de manhã, em jejum.</p>
+    <section class="card">${formCorpo(`<div class="field"><label>Meta de peso (kg)</label><input name="metaPeso" inputmode="decimal" placeholder="opcional"></div>
+      <div class="field"><label>Meta de gordura (%)</label><input name="metaGordura" inputmode="decimal" placeholder="opcional"></div>`, 'Salvar e montar meu treino')}</section>
+    <button class="link pular" data-act="pularcorpo">Pular por agora</button>`;
+  let h = `<p class="eyebrow">Seu corpo</p><h1>Corpo</h1><p class="sub">Meça sempre nas mesmas condições (manhã, em jejum, após ir ao banheiro).</p>
+  <section class="card"><div class="goal">
+    <div><small>Peso atual</small><b>${cur.peso?fmt(cur.peso)+' kg':'—'}</b>${META.peso?`<small>meta ${META.til||''}${fmt(META.peso)} kg</small>`:''}</div>
+    <div><small>Gordura atual</small><b>${cur.gordura?fmt(cur.gordura)+'%':'—'}</b>${META.gordura?`<small>meta ${META.til||''}${fmt(META.gordura)}%</small>`:''}</div>
+  </div></section>
+  <section class="card"><h3 style="margin-bottom:10px">Nova medição</h3>${formCorpo()}</section>
   <h2>Histórico</h2>`;
   if(!list.length) return h + `<p class="empty">Nenhuma medição ainda.</p>`;
   list.forEach((m,i)=>{
@@ -301,48 +324,67 @@ function viewCorpo(){
   return h;
 }
 
+const instalado = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+const DICA_INSTALAR = 'Instale na tela inicial para não perder seus dados. Android: menu ⋮ → Instalar app. iPhone: Compartilhar → Adicionar à Tela de Início.';
 function viewDados(){
-  return `<p class="eyebrow">Perfil: ${esc(PERFIL.nome)}</p><h1>Dados</h1><p class="sub">Tudo fica salvo neste navegador, neste aparelho. Faça backup de vez em quando.</p>
+  const pf = (f,v,mode,ph) => `<input inputmode="${mode}" autocomplete="off" value="${esc(v??'')}" placeholder="${ph}" data-pf="${f}">`;
+  return `<p class="eyebrow">Seus dados</p><h1>Dados</h1><p class="sub">Tudo fica salvo só neste aparelho. Faça backup de vez em quando.</p>
+    ${instalado()?'':`<p class="tip">${DICA_INSTALAR}</p>`}
+    <p class="sub">${db.backup ? `Último backup: ${fmtDate(db.backup)}/${db.backup.slice(0,4)}` : 'Você ainda não fez backup.'}</p>
     <button class="btn" data-act="export">Baixar backup (.json)</button>
     <label class="btn ghost" style="text-align:center;cursor:pointer">Restaurar backup<input type="file" id="imp" accept="application/json,.json"></label>
-    <h2>Perfil</h2><button class="btn ghost" data-act="trocar">Trocar de perfil</button>
+    <h2>Perfil</h2><section class="card">
+      <div class="field"><label>Nome</label>${pf('nome',PERFIL.nome,'text','Seu nome')}</div>
+      <div class="grid4"><div class="field"><label>Meta de peso (kg)</label>${pf('peso',META.peso&&fmt(META.peso),'decimal','opcional')}</div>
+      <div class="field"><label>Meta de gordura (%)</label>${pf('gordura',META.gordura&&fmt(META.gordura),'decimal','opcional')}</div></div></section>
     <h2>Cuidado</h2><button class="btn danger" data-act="wipe">Apagar todos os dados</button>`;
 }
 
 // símbolo da marca; cores vêm do CSS (.logo / .splash). Não distorcer nem girar
 const LOGO = `<svg viewBox="0 18 240 112" aria-hidden="true"><g class="pl"><rect x="40" y="82" width="160" height="12" rx="6"/><rect x="26" y="62" width="18" height="52" rx="9"/><rect x="50" y="50" width="20" height="76" rx="10"/><rect x="170" y="50" width="20" height="76" rx="10"/><rect x="196" y="62" width="18" height="52" rx="9"/></g><path d="M99 64 V48 a21 21 0 0 1 42 0 V64" fill="none" class="kb-a" stroke-width="11" stroke-linecap="round"/><rect class="kb" x="86" y="54" width="68" height="68" rx="28"/><path class="um" d="M101 89 H119 M110 80 V98 M129 82 L136 77 V101" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>`;
-function viewPerfis(){
+function viewInicio(){ // primeira abertura: cria o perfil deste aparelho
   return `<div class="splash-bg" aria-hidden="true">+1</div>
     <div class="splash-mid">${LOGO}<h1>mais um</h1><p>Toda evolução começa com mais um.</p></div>
-    <div class="splash-btns">${Object.entries(PERFIS).map(([id,p],i)=>
-      `<button class="btn ${i?'out':'plus'}" data-act="perfil" data-id="${id}">Entrar como ${esc(p.nome)}</button>`).join('')}</div>`;
+    <form id="novoPerfil" class="inicio">
+      <label class="campo"><span>Seu nome</span><input name="nome" autocomplete="given-name" maxlength="30" placeholder="Digite seu nome" required></label>
+      <button class="btn plus" type="submit">Começar e montar meu treino</button>
+      <label class="btn out" style="text-align:center;cursor:pointer">Já tenho backup<input type="file" id="imp" accept="application/json,.json"></label>
+      <p class="inicio-dica">${instalado()?'Seus treinos ficam só neste aparelho.':DICA_INSTALAR}</p>
+    </form>`;
 }
 
 function render(){
   document.body.classList.toggle('splash', !PERFIL);
-  if(!PERFIL){ document.querySelector('meta[name="theme-color"]').content='#5A2DCC'; $('#app').innerHTML = viewPerfis(); $('#nav').style.display='none'; return; }
-  $('#nav').style.display='';
+  document.querySelector('meta[name="theme-color"]').content = PERFIL ? '#FFFFFF' : '#5A2DCC';
+  if(!PERFIL){ $('#app').innerHTML = viewInicio(); $('#nav').style.display='none'; return; }
+  $('#nav').style.display = st.onboard ? 'none' : '';
   const v = {treino:()=>st.reg?viewTreino():viewHoje(), progresso:viewProgresso, corpo:viewCorpo, dados:viewDados}[st.tab];
   $('#app').innerHTML = v();
   document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('on', b.dataset.tab===st.tab));
 }
 
 /* ============================ eventos ============================ */
-function editPlan(){ if(!db.plan){ db.plan=JSON.parse(JSON.stringify(PERFIL.plan)); applyPlan(); } return db.plan; }
+const editPlan = () => db.plan;
 function exById(id){ for(const w of Object.values(PLAN)){ const e=w.ex.find(x=>x.id===id); if(e) return e; } }
 
 $('#nav').addEventListener('click', e=>{
   const b=e.target.closest('button'); if(!b) return;
-  st.tab=b.dataset.tab; st.reg=false; st.edit=false; render(); window.scrollTo(0,0);
+  st.tab=b.dataset.tab; st.reg=false; st.edit=false; st.repetido=null; st.dia=null; render(); window.scrollTo(0,0);
 });
 
 $('#app').addEventListener('input', e=>{
   const t=e.target;
   if(t.dataset.pe){ // sem render aqui para não perder o foco do campo
     const w=editPlan()[st.w], f=t.dataset.pe, ex=w.ex[+t.dataset.i];
-    if(f==='nome'||f==='dia') w[f]=t.value;
+    if(f==='nome') w.nome=t.value;
     else if(f==='n') ex.n=t.value;
     else { const n=Math.max(1,Math.round(num(t.value))); if(f==='s') ex.s=n; else ex.r[f==='r0'?0:1]=n; }
+    save(); return;
+  }
+  if(t.dataset.pf){ // perfil: nome e metas (metas vazias somem da tela Corpo)
+    const f=t.dataset.pf;
+    if(f==='nome'){ if(t.value.trim()) PERFIL.nome=t.value.trim(); }
+    else { const v=num(t.value); if(v>0) META[f]=v; else delete META[f]; }
     save(); return;
   }
   if(t.dataset.obs){ // fora do plano: vale para o exercício em qualquer treino e vai no backup
@@ -360,13 +402,7 @@ $('#app').addEventListener('click', e=>{
   const b=e.target.closest('[data-act]'); if(!b) return;
   const act=b.dataset.act;
 
-  if(act==='perfil'){
-    try{ localStorage.setItem(PERFIL_KEY,b.dataset.id); }catch(e){}
-    setPerfil(b.dataset.id); st.tab='treino'; render(); window.scrollTo(0,0);
-  }
-  else if(act==='trocar'){ sairPerfil(); render(); window.scrollTo(0,0); }
-
-  else if(act==='exedit'){ st.exEdit=b.dataset.id; render(); }
+  if(act==='exedit'){ st.exEdit=b.dataset.id; render(); }
   else if(act==='edit'){ st.edit=true; render(); window.scrollTo(0,0); }
   else if(act==='editok'){
     PLAN[st.w].ex.forEach(ex=>{ if(ex.r[0]>ex.r[1]) ex.r.reverse(); if(!ex.n.trim()) ex.n='Exercício';
@@ -374,17 +410,26 @@ $('#app').addEventListener('click', e=>{
       const d=db.drafts[st.w]&&db.drafts[st.w].sets[ex.id];
       if(d){ while(d.length<ex.s) d.push({kg:'',reps:'',done:false});
         while(d.length>ex.s && !d[d.length-1].done && !d[d.length-1].reps && !d[d.length-1].kg) d.pop(); } });
-    const noCard=st.exEdit; st.edit=false; st.exEdit=null; save(); render(); if(!noCard) window.scrollTo(0,0); toast('Plano salvo');
+    // tela de edição inteira volta para o Hoje; o card editado dentro do treino continua no treino
+    const noCard=st.exEdit; if(!noCard) st.reg=false;
+    st.edit=false; st.exEdit=null; save(); render(); if(!noCard) window.scrollTo(0,0); toast('Plano salvo');
   }
   else if(act==='exadd'){ const id='ex-'+Date.now(); editPlan()[st.w].ex.push({id, n:'Novo exercício', s:3, r:[10,12]}); if(!st.edit) st.exEdit=id; save(); render(); }
   else if(act==='exdel'){ const a=editPlan()[st.w].ex; if(a.length>1 && confirm(`Remover "${a[+b.dataset.i].n}"? O histórico dele fica guardado.`)){ a.splice(+b.dataset.i,1); save(); render(); } }
   else if(act==='exup'){ const a=editPlan()[st.w].ex, i=+b.dataset.i; if(i>0){ [a[i-1],a[i]]=[a[i],a[i-1]]; save(); render(); } }
-  else if(act==='planreset'){ if(confirm('Voltar ao plano padrão? Suas edições no plano serão perdidas.')){ delete db.plan; applyPlan(); st.edit=false; save(); render(); } }
-
-  else if(act==='dia'){ st.dia=+b.dataset.i; st.w=treinoDoDia(st.dia)||st.w; render(); }
+  else if(act==='escolher'){
+    const k=b.dataset.w;
+    if(feitosSemana().has(k) && emAndamento()!==k){ st.repetido=k; render(); window.scrollTo(0,0); return; }
+    st.w=k; st.repetido=null; st.exEdit=null; st.reg=true; render(); window.scrollTo(0,0);
+  }
+  else if(act==='trocartreino'){ st.repetido=null; render(); }
+  else if(act==='dia'){ const i=b.dataset.i; st.dia = i==='hoje' || semana()[+i]===today() ? null : +i; st.repetido=null; render(); }
+  else if(act==='pularcorpo'){ irEditor(); }
+  else if(act==='irdados'){ st.tab='dados'; render(); window.scrollTo(0,0); }
   else if(act==='novo'){
     const p=editPlan(), k=[...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'].find(l=>!p[l]);
-    p[k]={ nome:'Novo treino', dia:nomeDia(st.dia), ex:[{id:'ex-'+Date.now(), n:'Novo exercício', s:3, r:[10,12]}] };
+    if(!k) return;
+    p[k]={ nome:'Novo treino', ex:[{id:'ex-'+Date.now(), n:'Novo exercício', s:3, r:[10,12]}] };
     st.w=k; st.reg=true; st.edit=true; save(); render(); window.scrollTo(0,0);
   }
   else if(act==='treinodel'){
@@ -392,7 +437,7 @@ $('#app').addEventListener('click', e=>{
       delete editPlan()[st.w]; delete db.drafts[st.w]; applyPlan(); st.edit=false; st.reg=false; save(); render(); window.scrollTo(0,0);
     }
   }
-  else if(act==='start'){ st.w=b.dataset.w; st.exEdit=null; st.reg=true; render(); window.scrollTo(0,0); }
+  else if(act==='start'){ st.w=b.dataset.w; st.exEdit=null; st.repetido=null; st.reg=true; render(); window.scrollTo(0,0); }
   else if(act==='hoje'){ st.reg=false; st.edit=false; render(); window.scrollTo(0,0); }
 
   else if(act==='chk'){
@@ -438,24 +483,42 @@ $('#app').addEventListener('click', e=>{
 
   else if(act==='export'){
     const blob=new Blob([JSON.stringify(db,null,1)],{type:'application/json'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`mais-um-${PERFIL.id}-${today()}.json`; a.click();
+    const nome = PERFIL.nome.normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-zA-Z0-9]+/g,'-').toLowerCase();
+    const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`mais-um-${nome}-${today()}.json`; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+    db.backup=today(); save(); render();
   }
 
   else if(act==='wipe'){
-    if(confirm('Apagar TODOS os treinos e medições deste navegador?')){
-      db={ sessions:[], body:[], drafts:{}, seeded:true }; applyPlan(); save(); render(); toast('Dados apagados');
+    if(confirm('Apagar TODOS os seus treinos, medições e o seu plano deste aparelho? O app volta para a tela inicial.')){
+      try{ localStorage.removeItem(KEY); localStorage.removeItem(PERFIL_KEY); }catch(e){}
+      PERFIL=null; db=null; st.tab='treino'; st.reg=false; render(); window.scrollTo(0,0);
     }
   }
 });
 
 $('#app').addEventListener('submit', e=>{
+  if(e.target.id==='novoPerfil'){
+    e.preventDefault();
+    const nome=String(new FormData(e.target).get('nome')||'').trim();
+    if(!nome){ toast('Digite seu nome'); return; }
+    criarPerfil(nome); // cadastro: passo 1 corpo, passo 2 editor do treino A em branco
+    st.onboard=true; st.tab='corpo'; render(); window.scrollTo(0,0);
+    toast(`Bem-vindo, ${nome}!`);
+    return;
+  }
   if(e.target.id!=='bodyForm') return;
   e.preventDefault();
   const f=new FormData(e.target), m={ date:f.get('date'), peso:num(f.get('peso')) };
   ['gordura','musculo','visceral'].forEach(k=>{ const v=num(f.get(k)); if(v) m[k]=v; });
   if(!m.peso){ toast('Informe o peso'); return; }
-  db.body.push(m); save(); render(); toast('Medição salva');
+  db.body.push(m);
+  if(st.onboard){
+    const mp=num(f.get('metaPeso')), mg=num(f.get('metaGordura'));
+    if(mp>0) META.peso=mp; if(mg>0) META.gordura=mg;
+    save(); irEditor(); return;
+  }
+  save(); render(); toast('Medição salva');
 });
 
 $('#app').addEventListener('change', e=>{
@@ -466,7 +529,14 @@ $('#app').addEventListener('change', e=>{
   r.onload=()=>{ try{
       const d=JSON.parse(r.result);
       if(!d.sessions||!d.body) throw 0;
-      db={ drafts:{}, seeded:true, ...d }; applyPlan(); save(); render(); toast('Backup restaurado');
+      if(d.plan && !Object.keys(d.plan).length) delete d.plan;
+      if(!PERFIL){ // restaurando na primeira abertura: cria o perfil deste aparelho
+        const campo=$('#novoPerfil [name=nome]');
+        criarPerfil((d.perfil&&d.perfil.nome) || (campo&&campo.value.trim()) || 'Você'); st.tab='treino';
+      }
+      // backup antigo (sem perfil ou sem plano) fica com o perfil e o plano deste aparelho
+      db={ drafts:{}, seeded:true, perfil:db.perfil, plan:db.plan, ...d };
+      PERFIL=db.perfil; META=PERFIL.meta=PERFIL.meta||{}; applyPlan(); save(); render(); toast('Backup restaurado');
     }catch(err){ toast('Arquivo inválido'); } };
   r.readAsText(file);
 });
@@ -474,10 +544,10 @@ $('#app').addEventListener('change', e=>{
 (function init(){
   let id = null;
   try{
-    const q = new URLSearchParams(location.search).get('perfil');
-    if(q && PERFIS[q]){ id=q; localStorage.setItem(PERFIL_KEY,q); }
-    else id = localStorage.getItem(PERFIL_KEY);
+    id = localStorage.getItem(PERFIL_KEY);
+    const q = new URLSearchParams(location.search).get('perfil'); // links antigos ?perfil=matheus
+    if(!id && LEGADO[q]){ id=q; localStorage.setItem(PERFIL_KEY,q); }
   }catch(e){}
-  if(id && PERFIS[id]) setPerfil(id);
+  if(id) setPerfil(id);
   render();
 })();

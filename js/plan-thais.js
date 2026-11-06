@@ -4,7 +4,7 @@
    semCarga = true quando não usa kg; u = unidade ('s' ou 'min')
    ============================================================ */
 const PLAN_THAIS = {
-  A:{ nome:'Anterior e glúteos', dia:'Segunda', ex:[
+  A:{ nome:'Anterior e glúteos', ex:[
     {id:'extensora',  n:'Cadeira extensora',            s:4, r:[12,15]},
     {id:'leg-press',  n:'Leg press 45° ou horizontal',  s:4, r:[10,12]},
     {id:'sissy-hack', n:'Agachamento sissy ou hack',    s:3, r:[12,12]},
@@ -13,7 +13,7 @@ const PLAN_THAIS = {
     {id:'gemeos',     n:'Gêmeos sentado',               s:4, r:[15,15]},
     {id:'bike-a',     n:'Bike sentada',                 s:1, r:[15,20], u:'min', semCarga:true},
   ]},
-  B:{ nome:'Superiores e tronco', dia:'Quarta', ex:[
+  B:{ nome:'Superiores e tronco', ex:[
     {id:'puxada',     n:'Puxada frontal (pulley)',      s:3, r:[12,12]},
     {id:'remada',     n:'Remada baixa sentada',         s:3, r:[12,12]},
     {id:'supino',     n:'Supino máquina ou halteres',   s:3, r:[12,12]},
@@ -22,7 +22,7 @@ const PLAN_THAIS = {
     {id:'triceps',    n:'Tríceps pulley',               s:3, r:[12,15]},
     {id:'bike-b',     n:'Bike sentada',                 s:1, r:[15,20], u:'min', semCarga:true},
   ]},
-  C:{ nome:'Posterior e glúteos', dia:'Sexta', ex:[
+  C:{ nome:'Posterior e glúteos', ex:[
     {id:'flexora',    n:'Cadeira flexora',              s:4, r:[12,15]},
     {id:'mesa-flex',  n:'Mesa flexora',                 s:3, r:[12,12]},
     {id:'passada',    n:'Passada / afundo',             s:3, r:[10,12]},
